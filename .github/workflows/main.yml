@@ -5,9 +5,9 @@
 name: Build ReVanced (All-in-One)
 
 on:
-  workflow_dispatch: # Manual trigger
+  workflow_dispatch: # <-- THIS IS THE MANUAL TRIGGER YOU ASKED FOR
   schedule:
-    - cron: '0 */6 * * *' # Every 6 hours
+    - cron: '0 */6 * * *' # This is the 6-hour automatic run
 
 permissions:
   contents: write # Needed to create releases
