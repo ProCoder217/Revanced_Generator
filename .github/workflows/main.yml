@@ -1,8 +1,8 @@
-# This workflow uses the Revancify script to build everything.
-# It does NOT use or need a config.toml file.
-# It will build all 16 versions and upload them to a single new release.
+# This is a single, all-in-one workflow file.
+# It contains all logic AND all configuration.
+# You do NOT need any other files in your repository.
 
-name: Build with Revancify
+name: Build ReVanced (All-in-One)
 
 on:
   workflow_dispatch: # Manual trigger
@@ -10,111 +10,89 @@ on:
     - cron: '0 */6 * * *' # Every 6 hours
 
 permissions:
-  contents: write # To create releases
+  contents: write # Needed to create releases
 
 jobs:
   build:
     runs-on: ubuntu-latest
     
-    # This matrix defines all 16 builds you requested
-    # (2 apps x 2 architectures x 4 types)
-    strategy:
-      fail-fast: false # Don't cancel all jobs if one fails
-      matrix:
-        app: [ 'youtube', 'youtube-music' ]
-        arch: [ 'arm64-v8a', 'armeabi-v7a' ]
-        type: [ 'non-root', 'root', 'magisk', 'kernelsu' ]
-
     steps:
-      - name: Install Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends rsync zip unzip
-          
-      - name: Clone Revancify
-        run: |
-          git clone https://github.com/decipher3114/Revancify.git
-          cd Revancify
-          chmod +x revancify
-          
-      - name: Set Patch Arguments
-        # This step sets your custom patches as an environment variable
-        run: |
-          if [ "${{ matrix.app }}" == "youtube" ]; then
-            EXCLUDES="--exclude-patches 'Disable auto captions' --exclude-patches 'Custom branding'"
-            ARGS="--patcher-args '-e Custom branding -OcustomName=REVANCED YT'"
-          else
-            EXCLUDES="--exclude-patches 'Custom branding'"
-            ARGS="--patcher-args '-e Custom branding -OcustomName=REVANCED MUSIC'"
-          fi
-          
-          # This is the most important part:
-          # If the build is NOT non-root, we must ALSO exclude 'microg-support'
-          if [ "${{ matrix.type }}" != "non-root" ]; then
-            EXCLUDES="$EXCLUDES --exclude-patches 'microg-support'"
-            
-            # For Magisk/KSU, add the detach option for Play Store protection
-            if [ "${{ matrix.type }}" == "magisk" ] || [ "${{ matrix.type }}" == "kernelsu" ]; then
-              EXCLUDES="$EXCLUDES --include-patches 'Play Store detach'"
-            fi
-          fi
-          
-          echo "EXCLUDED_PATCHES=$EXCLUDES" >> $GITHUB_ENV
-          echo "EXTRA_ARGS=$ARGS" >> $GITHUB_ENV
-
-      - name: Run Revancify
-        run: |
-          cd Revancify
-          
-          # This is the main build command
-          ./revancify --app-name="${{ matrix.app }}" \
-                      --arch="${{ matrix.arch }}" \
-                      --type="${{ matrix.type }}" \
-                      ${{ env.EXCLUDED_PATCHES }} \
-                      ${{ env.EXTRA_ARGS }} \
-                      --non-interactive
-                      
-          # After building, move the file to a common folder for upload
-          mkdir -p ../artifacts
-          # The output file is in 'build/revancify'
-          mv build/revancify/*.apk ../artifacts/ 2>/dev/null || true
-          mv build/revancify/*.zip ../artifacts/ 2>/dev/null || true
-
-      - name: Upload Artifacts
-        # This uploads the files from this single matrix job
-        uses: actions/upload-artifact@v4
-        with:
-          name: revanced-build-${{ matrix.app }}-${{ matrix.arch }}-${{ matrix.type }}
-          path: artifacts/
-
-  # --- Release Job ---
-  # This job runs only after ALL 16 builds are finished
-  # It gathers all files into one release
-  create-release:
-    runs-on: ubuntu-latest
-    needs: build # Wait for all matrix jobs to finish
-    
-    steps:
-      - name: Generate Tag
-        id: tag
+      # 1. Generate a Unique Tag for the new release
+      - name: Generate Unique Tag
         run: echo "TAG_NAME=$(date +'%Y.%m.%d-%H%M')" >> $GITHUB_ENV
 
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts # This will download all artifacts into separate folders
-          
-      - name: Organize Artifacts
+      # 2. Clone the j-hc builder scripts into a temp folder
+      - name: Clone ReVanced Builder Scripts
         run: |
-          # Move all files from their subfolders into one 'release-files' folder
-          mkdir release-files
-          find artifacts/ -type f \( -name "*.apk" -o -name "*.zip" \) -exec mv {} release-files/ \;
+          # We clone the scripts into a folder named 'builder-scripts'
+          git clone https://github.com/j-hc/revanced-magisk-module builder-scripts
+          
+      # 3. Create Custom Config File
+      - name: Create Custom Config
+        run: |
+          # This step writes your configuration directly into the config.toml
+          # file required by the build script.
+          cat << 'EOF' > ./builder-scripts/config.toml
+# === THIS IS YOUR CONFIGURATION, MERGED INTO THE YAML ===
 
-      - name: Create Release and Upload Assets
+# --- Global Build Options ---
+build_non_root = true   # Build the non-root (MicroG) APK
+build_magisk = true       # Build the Magisk module .zip
+build_kernelsu = true     # Build the KernelSU module .zip
+build_root_apk = true   # Build the simple root-installable .apk
+
+# --- Detach Options ---
+magisk_detach = true
+kernelsu_detach = true
+
+# ===============================================
+#               APP CONFIGURATIONS
+# ===============================================
+
+# --- YouTube ---
+[YouTube.non_root]
+apkmirror_dlurl = "https://apkmirror.com/apk/google-inc/youtube/"
+excluded_patches = "'Disable auto captions' 'Custom branding'"
+patcher_args = "-e 'Custom branding' -OcustomName=REVANCED YT"
+
+[YouTube.root]
+apkmirror_dlurl = "https://apkmirror.com/apk/google-inc/youtube/"
+excluded_patches = "'Disable auto captions' 'Custom branding' 'microg-support'"
+patcher_args = "-e 'Custom branding' -OcustomName=REVANCED YT"
+
+
+# --- YouTube Music ---
+[Music.non_root]
+apkmirror_dlurl = "https://apkmirror.com/apk/google-inc/youtube-music/"
+patcher_args = "-e 'Custom branding' -OcustomName=REVANCED MUSIC"
+
+[Music.root]
+apkmirror_dlurl = "https://apkmirror.com/apk/google-inc/youtube-music/"
+excluded_patches = "'microg-support'"
+patcher_args = "-e 'Custom branding' -OcustomName=REVANCED MUSIC"
+EOF
+
+      # 4. Run the Builder Script
+      - name: Run ReVanced Builder
+        run: |
+          cd builder-scripts
+          chmod +x build.sh
+          # This script will now read the config we just created
+          ./build.sh
+          cd ..
+          
+      # 5. Create Release and Upload All Built Files
+      - name: Create Release and Upload
         uses: ncipollo/release-action@v1
         with:
+          # Use the tag we generated
           tag: ${{ env.TAG_NAME }}
-          name: ReVanced Build (Revancify) - ${{ env.TAG_NAME }}
-          body: "Automated build using decipher3114/Revancify. Contains all types (non-root, root, Magisk, KSU) for armv7 and armv8."
-          artifacts: "release-files/*"
+          name: ReVanced Build - ${{ env.TAG_NAME }}
+          
+          # This finds all APKs and ZIPs the script built
+          artifacts: "builder-scripts/releases/*"
+          
+          # This gets the changelog the script generated
+          bodyFile: "builder-scripts/releases/CHANGELOG.md"
+          
           token: ${{ secrets.GITHUB_TOKEN }}
