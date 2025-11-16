@@ -1,0 +1,45 @@
+# This is the advanced config file required by the j-hc builder scripts.
+# It tells the scripts to build all the versions you want.
+# You can edit the 'excluded_patches' or 'patcher_args' for each app.
+
+# --- Global Build Options ---
+# These flags tell the builder what to make.
+build_non_root = true   # Build the non-root (MicroG) APK
+build_magisk = true       # Build the Magisk module .zip
+build_kernelsu = true     # Build the KernelSU module .zip
+build_root_apk = true   # Build the simple root-installable .apk
+
+# --- Detach Options ---
+# This adds the Play Store detach patch to prevent auto-updates.
+magisk_detach = true
+kernelsu_detach = true
+
+# ===============================================
+#               APP CONFIGURATIONS
+# ===============================================
+
+# --- YouTube ---
+# We define a "non_root" build that INCLUDES microg-support
+[YouTube.non_root]
+apkmirror_dlurl = "https://apkmirror.com/apk/google-inc/youtube/"
+excluded_patches = "'Disable auto captions' 'Custom branding'"
+patcher_args = "-e 'Custom branding' -OcustomName=REVANCED YT"
+
+# We define a "root" build that EXCLUDES microg-support
+[YouTube.root]
+apkmirror_dlurl = "https://apkmirror.com/apk/google-inc/youtube/"
+excluded_patches = "'Disable auto captions' 'Custom branding' 'microg-support'"
+patcher_args = "-e 'Custom branding' -OcustomName=REVANCED YT"
+
+
+# --- YouTube Music ---
+# We define a "non_root" build that INCLUDES microg-support
+[Music.non_root]
+apkmirror_dlurl = "https://apkmirror.com/apk/google-inc/youtube-music/"
+patcher_args = "-e 'Custom branding' -OcustomName=REVANCED MUSIC"
+
+# We define a "root" build that EXCLUDES microg-support
+[Music.root]
+apkmirror_dlurl = "httpss://apkmirror.com/apk/google-inc/youtube-music/"
+excluded_patches = "'microg-support'"
+patcher_args = "-e 'Custom branding' -OcustomName=REVANCED MUSIC"
