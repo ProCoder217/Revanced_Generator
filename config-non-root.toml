@@ -1,0 +1,7 @@
+[YouTube]
+apkmirror-dlurl = "https://apkmirror.com/apk/google-inc/youtube/"
+excluded-patches = "'Disable auto captions' 'Custom branding'"
+patcher-args = "-e 'Custom branding' -OcustomName=REVANCED YT"
+[Music]
+apkmirror-dlurl = "https://apkmirror.com/apk/google-inc/youtube-music/"
+patcher-args = "-e 'Custom branding' -OcustomName=REVANCED MUSIC"
