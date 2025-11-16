@@ -1,95 +1,120 @@
-# This workflow builds both root and non-root versions for armv7 and armv8,
-# including Magisk and KSU modules, and combines them into one release.
+# This workflow uses the Revancify script to build everything.
+# It does NOT use or need a config.toml file.
+# It will build all 16 versions and upload them to a single new release.
 
-name: Build ReVanced (Full Matrix)
+name: Build with Revancify
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Manual trigger
   schedule:
     - cron: '0 */6 * * *' # Every 6 hours
-  push:
-    paths:
-      - 'config-non-root.toml'
-      - 'config-root.toml'
 
-# Grant permissions for creating releases
 permissions:
-  contents: write
+  contents: write # To create releases
 
 jobs:
-  # This first job builds the NON-ROOT (MicroG) versions
-  # It also CREATES the new release.
-  build-non-root:
+  build:
     runs-on: ubuntu-latest
     
-    # We add outputs so the next job can get the tag name
-    outputs:
-      tag: ${{ env.TAG_NAME }}
-      
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    # This matrix defines all 16 builds you requested
+    # (2 apps x 2 architectures x 4 types)
+    strategy:
+      fail-fast: false # Don't cancel all jobs if one fails
+      matrix:
+        app: [ 'youtube', 'youtube-music' ]
+        arch: [ 'arm64-v8a', 'armeabi-v7a' ]
+        type: [ 'non-root', 'root', 'magisk', 'kernelsu' ]
 
-      - name: Generate Unique Tag
+    steps:
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends rsync zip unzip
+          
+      - name: Clone Revancify
+        run: |
+          git clone https://github.com/decipher3114/Revancify.git
+          cd Revancify
+          chmod +x revancify
+          
+      - name: Set Patch Arguments
+        # This step sets your custom patches as an environment variable
+        run: |
+          if [ "${{ matrix.app }}" == "youtube" ]; then
+            EXCLUDES="--exclude-patches 'Disable auto captions' --exclude-patches 'Custom branding'"
+            ARGS="--patcher-args '-e Custom branding -OcustomName=REVANCED YT'"
+          else
+            EXCLUDES="--exclude-patches 'Custom branding'"
+            ARGS="--patcher-args '-e Custom branding -OcustomName=REVANCED MUSIC'"
+          fi
+          
+          # This is the most important part:
+          # If the build is NOT non-root, we must ALSO exclude 'microg-support'
+          if [ "${{ matrix.type }}" != "non-root" ]; then
+            EXCLUDES="$EXCLUDES --exclude-patches 'microg-support'"
+            
+            # For Magisk/KSU, add the detach option for Play Store protection
+            if [ "${{ matrix.type }}" == "magisk" ] || [ "${{ matrix.type }}" == "kernelsu" ]; then
+              EXCLUDES="$EXCLUDES --include-patches 'Play Store detach'"
+            fi
+          fi
+          
+          echo "EXCLUDED_PATCHES=$EXCLUDES" >> $GITHUB_ENV
+          echo "EXTRA_ARGS=$ARGS" >> $GITHUB_ENV
+
+      - name: Run Revancify
+        run: |
+          cd Revancify
+          
+          # This is the main build command
+          ./revancify --app-name="${{ matrix.app }}" \
+                      --arch="${{ matrix.arch }}" \
+                      --type="${{ matrix.type }}" \
+                      ${{ env.EXCLUDED_PATCHES }} \
+                      ${{ env.EXTRA_ARGS }} \
+                      --non-interactive
+                      
+          # After building, move the file to a common folder for upload
+          mkdir -p ../artifacts
+          # The output file is in 'build/revancify'
+          mv build/revancify/*.apk ../artifacts/ 2>/dev/null || true
+          mv build/revancify/*.zip ../artifacts/ 2>/dev/null || true
+
+      - name: Upload Artifacts
+        # This uploads the files from this single matrix job
+        uses: actions/upload-artifact@v4
+        with:
+          name: revanced-build-${{ matrix.app }}-${{ matrix.arch }}-${{ matrix.type }}
+          path: artifacts/
+
+  # --- Release Job ---
+  # This job runs only after ALL 16 builds are finished
+  # It gathers all files into one release
+  create-release:
+    runs-on: ubuntu-latest
+    needs: build # Wait for all matrix jobs to finish
+    
+    steps:
+      - name: Generate Tag
+        id: tag
         run: echo "TAG_NAME=$(date +'%Y.%m.%d-%H%M')" >> $GITHUB_ENV
 
-      - name: Run Builder (Non-Root)
-        uses: decipher-media/revanced-manager-ci@v2
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
         with:
-          # --- Basic Config ---
-          config-file: 'config-non-root.toml' # Use the non-root config
-          workflow-actor: 'github-actions[bot]'
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-          # --- Architecture Config ---
-          # Build for both armv8 (64-bit) and armv7 (32-bit)
-          build-architectures: 'arm64-v8a, armeabi-v7a'
-
-          # --- Release Config ---
-          build-release: true
-          release-tag: ${{ env.TAG_NAME }}
-          release-name: 'ReVanced Build - ${{ env.TAG_NAME }}'
+          path: artifacts # This will download all artifacts into separate folders
           
-          # --- Module Config (All Disabled) ---
-          build-magisk: false
-          build-kernelsu: false
-          
-      # This step passes the tag name to the next job
-      - name: Set output tag
-        run: echo "tag=${{ env.TAG_NAME }}" >> $GITHUB_OUTPUT
+      - name: Organize Artifacts
+        run: |
+          # Move all files from their subfolders into one 'release-files' folder
+          mkdir release-files
+          find artifacts/ -type f \( -name "*.apk" -o -name "*.zip" \) -exec mv {} release-files/ \;
 
-  # This second job builds ALL the ROOT versions
-  # It depends on the first job and uploads to the SAME release.
-  build-root:
-    runs-on: ubuntu-latest
-    needs: build-non-root # This job waits for the 'build-non-root' job to finish
-    
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Run Builder (Root)
-        uses: decipher-media/revanced-manager-ci@v2
+      - name: Create Release and Upload Assets
+        uses: ncipollo/release-action@v1
         with:
-          # --- Basic Config ---
-          config-file: 'config-root.toml' # Use the ROOT config
-          workflow-actor: 'github-actions[bot]'
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-          # --- Architecture Config ---
-          build-architectures: 'arm64-v8a, armeabi-v7a'
-
-          # --- Release Config ---
-          build-release: true
-          # Use the SAME tag from the first job to upload to the SAME release
-          release-tag: ${{ needs.build-non-root.outputs.tag }}
-          release-name: 'ReVanced Build - ${{ needs.build-non-root.outputs.tag }}'
-
-          # --- Module Config (All Enabled) ---
-          # Build Magisk module
-          build-magisk: true
-          # Build KSU module
-          build-kernelsu: true
-          # Add Play Store detach patch (prevents auto-update)
-          build-magisk-detach: true
-          build-kernelsu-detach: true
+          tag: ${{ env.TAG_NAME }}
+          name: ReVanced Build (Revancify) - ${{ env.TAG_NAME }}
+          body: "Automated build using decipher3114/Revancify. Contains all types (non-root, root, Magisk, KSU) for armv7 and armv8."
+          artifacts: "release-files/*"
+          token: ${{ secrets.GITHUB_TOKEN }}
