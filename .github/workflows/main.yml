@@ -1,5 +1,6 @@
 # This workflow file will run the j-hc builder scripts
 # using your *own* config.toml file.
+# It includes a new debug step to print the config.
 
 name: Build ReVanced (Hybrid)
 
@@ -38,7 +39,14 @@ jobs:
           # Copy your config.toml into the builder, replacing its default
           cp ./config.toml ./builder-scripts/config.toml
           
-      # 5. Run the Builder Script
+      # 5. --- NEW DEBUG STEP ---
+      - name: "Debug: Print config.toml"
+        run: |
+          echo "--- START OF config.toml ---"
+          cat ./builder-scripts/config.toml
+          echo "--- END OF config.toml ---"
+
+      # 6. Run the Builder Script
       - name: Run ReVanced Builder
         run: |
           cd builder-scripts
@@ -47,7 +55,7 @@ jobs:
           ./build.sh
           cd ..
           
-      # 6. Create Release and Upload All Built Files
+      # 7. Create Release and Upload All Built Files
       - name: Create Release and Upload
         uses: ncipollo/release-action@v1
         with:
