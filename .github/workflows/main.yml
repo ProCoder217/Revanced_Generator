@@ -1,0 +1,95 @@
+# This workflow builds both root and non-root versions for armv7 and armv8,
+# including Magisk and KSU modules, and combines them into one release.
+
+name: Build ReVanced (Full Matrix)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 */6 * * *' # Every 6 hours
+  push:
+    paths:
+      - 'config-non-root.toml'
+      - 'config-root.toml'
+
+# Grant permissions for creating releases
+permissions:
+  contents: write
+
+jobs:
+  # This first job builds the NON-ROOT (MicroG) versions
+  # It also CREATES the new release.
+  build-non-root:
+    runs-on: ubuntu-latest
+    
+    # We add outputs so the next job can get the tag name
+    outputs:
+      tag: ${{ env.TAG_NAME }}
+      
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Generate Unique Tag
+        run: echo "TAG_NAME=$(date +'%Y.%m.%d-%H%M')" >> $GITHUB_ENV
+
+      - name: Run Builder (Non-Root)
+        uses: decipher-media/revanced-manager-ci@v2
+        with:
+          # --- Basic Config ---
+          config-file: 'config-non-root.toml' # Use the non-root config
+          workflow-actor: 'github-actions[bot]'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+          # --- Architecture Config ---
+          # Build for both armv8 (64-bit) and armv7 (32-bit)
+          build-architectures: 'arm64-v8a, armeabi-v7a'
+
+          # --- Release Config ---
+          build-release: true
+          release-tag: ${{ env.TAG_NAME }}
+          release-name: 'ReVanced Build - ${{ env.TAG_NAME }}'
+          
+          # --- Module Config (All Disabled) ---
+          build-magisk: false
+          build-kernelsu: false
+          
+      # This step passes the tag name to the next job
+      - name: Set output tag
+        run: echo "tag=${{ env.TAG_NAME }}" >> $GITHUB_OUTPUT
+
+  # This second job builds ALL the ROOT versions
+  # It depends on the first job and uploads to the SAME release.
+  build-root:
+    runs-on: ubuntu-latest
+    needs: build-non-root # This job waits for the 'build-non-root' job to finish
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Builder (Root)
+        uses: decipher-media/revanced-manager-ci@v2
+        with:
+          # --- Basic Config ---
+          config-file: 'config-root.toml' # Use the ROOT config
+          workflow-actor: 'github-actions[bot]'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+          # --- Architecture Config ---
+          build-architectures: 'arm64-v8a, armeabi-v7a'
+
+          # --- Release Config ---
+          build-release: true
+          # Use the SAME tag from the first job to upload to the SAME release
+          release-tag: ${{ needs.build-non-root.outputs.tag }}
+          release-name: 'ReVanced Build - ${{ needs.build-non-root.outputs.tag }}'
+
+          # --- Module Config (All Enabled) ---
+          # Build Magisk module
+          build-magisk: true
+          # Build KSU module
+          build-kernelsu: true
+          # Add Play Store detach patch (prevents auto-update)
+          build-magisk-detach: true
+          build-kernelsu-detach: true
