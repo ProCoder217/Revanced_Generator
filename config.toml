@@ -20,13 +20,10 @@ kernelsu_detach = true
 
 # --- YouTube ---
 # We define a "non_root" build that INCLUDES microg-support
-[YouTube.non_root]
-apkmirror_dlurl = "https://apkmirror.com/apk/google-inc/youtube/"
-excluded_patches = "'Disable auto captions' 'Custom branding'"
-patcher_args = "-e 'Custom branding' -OcustomName=REVANCED YT"
+
 
 # We define a "root" build that EXCLUDES microg-support
-[YouTube.root]
+[YouTube]
 apkmirror_dlurl = "https://apkmirror.com/apk/google-inc/youtube/"
 excluded_patches = "'Disable auto captions' 'Custom branding' 'microg-support'"
 patcher_args = "-e 'Custom branding' -OcustomName=REVANCED YT"
@@ -34,12 +31,9 @@ patcher_args = "-e 'Custom branding' -OcustomName=REVANCED YT"
 
 # --- YouTube Music ---
 # We define a "non_root" build that INCLUDES microg-support
-[Music.non_root]
-apkmirror_dlurl = "https://apkmirror.com/apk/google-inc/youtube-music/"
-patcher_args = "-e 'Custom branding' -OcustomName=REVANCED MUSIC"
 
 # We define a "root" build that EXCLUDES microg-support
-[Music.root]
+[Music]
 # THIS IS THE FIXED LINE. Make sure yours looks like this.
 apkmirror_dlurl = "https://apkmirror.com/apk/google-inc/youtube-music/"
 excluded_patches = "'microg-support'"
