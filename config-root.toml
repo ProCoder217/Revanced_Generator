@@ -1,0 +1,11 @@
+[YouTube]
+apkmirror-dlurl = "https://apkmirror.com/apk/google-inc/youtube/"
+# We add 'microg-support' to the list of patches to exclude for root builds
+excluded-patches = "'Disable auto captions' 'Custom branding' 'microg-support'"
+patcher-args = "-e 'Custom branding' -OcustomName=REVANCED YT"
+
+[Music]
+apkmirror-dlurl = "https://apkmirror.com/apk/google-inc/youtube-music/"
+# We add 'microg-support' to the list of patches to exclude for root builds
+excluded-patches = "'microg-support'"
+patcher-args = "-e 'Custom branding' -OcustomName=REVANCED MUSIC"
