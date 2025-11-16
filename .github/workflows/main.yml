@@ -1,13 +1,15 @@
-# This is a single, all-in-one workflow file.
-# It contains all logic AND all configuration.
-# You do NOT need any other files in your repository.
+# This workflow file will run the j-hc builder scripts
+# using your *own* config.toml file.
 
-name: Build ReVanced (All-in-One)
+name: Build ReVanced (Hybrid)
 
 on:
   workflow_dispatch: # Manual trigger
   schedule:
     - cron: '0 */6 * * *' # Every 6 hours
+  push:
+    paths:
+      - 'config.toml' # Also trigger a build if you update your config
 
 permissions:
   contents: write # Needed to create releases
@@ -21,67 +23,31 @@ jobs:
       - name: Generate Unique Tag
         run: echo "TAG_NAME=$(date +'%Y.%m.%d-%H%M')" >> $GITHUB_ENV
 
-      # 2. Clone the j-hc builder scripts into a temp folder
+      # 2. Checkout your repository's files (to get your config.toml)
+      - name: Checkout Your Config
+        uses: actions/checkout@v4
+
+      # 3. Clone the j-hc builder scripts into a temp folder
       - name: Clone ReVanced Builder Scripts
         run: |
-          # We clone the scripts into a folder named 'builder-scripts'
           git clone https://github.com/j-hc/revanced-magisk-module builder-scripts
           
-      # 3. Create Custom Config File
-      - name: Create Custom Config
+      # 4. Inject Your Config
+      - name: Inject Your Config
         run: |
-          # This step writes your configuration directly into the config.toml
-          # file required by the build script.
-          cat << 'EOF' > ./builder-scripts/config.toml
-# === THIS IS YOUR CONFIGURATION, MERGED INTO THE YAML ===
-
-# --- Global Build Options ---
-build_non_root = true   # Build the non-root (MicroG) APK
-build_magisk = true       # Build the Magisk module .zip
-build_kernelsu = true     # Build the KernelSU module .zip
-build_root_apk = true   # Build the simple root-installable .apk
-
-# --- Detach Options ---
-magisk_detach = true
-kernelsu_detach = true
-
-# ===============================================
-#               APP CONFIGURATIONS
-# ===============================================
-
-# --- YouTube ---
-[YouTube.non_root]
-apkmirror_dlurl = "https://apkmirror.com/apk/google-inc/youtube/"
-excluded_patches = "'Disable auto captions' 'Custom branding'"
-patcher_args = "-e 'Custom branding' -OcustomName=REVANCED YT"
-
-[YouTube.root]
-apkmirror_dlurl = "https://apkmirror.com/apk/google-inc/youtube/"
-excluded_patches = "'Disable auto captions' 'Custom branding' 'microg-support'"
-patcher_args = "-e 'Custom branding' -OcustomName=REVANCED YT"
-
-
-# --- YouTube Music ---
-[Music.non_root]
-apkmirror_dlurl = "https://apkmirror.com/apk/google-inc/youtube-music/"
-patcher_args = "-e 'Custom branding' -OcustomName=REVANCED MUSIC"
-
-[Music.root]
-apkmirror_dlurl = "https://apkmirror.com/apk/google-inc/youtube-music/"
-excluded_patches = "'microg-support'"
-patcher_args = "-e 'Custom branding' -OcustomName=REVANCED MUSIC"
-EOF
-
-      # 4. Run the Builder Script
+          # Copy your config.toml into the builder, replacing its default
+          cp ./config.toml ./builder-scripts/config.toml
+          
+      # 5. Run the Builder Script
       - name: Run ReVanced Builder
         run: |
           cd builder-scripts
           chmod +x build.sh
-          # This script will now read the config we just created
+          # This script will now read the config we just copied
           ./build.sh
           cd ..
           
-      # 5. Create Release and Upload All Built Files
+      # 6. Create Release and Upload All Built Files
       - name: Create Release and Upload
         uses: ncipollo/release-action@v1
         with:
@@ -96,5 +62,3 @@ EOF
           bodyFile: "builder-scripts/releases/CHANGELOG.md"
           
           token: ${{ secrets.GITHUB_TOKEN }}
-
-
