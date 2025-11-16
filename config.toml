@@ -40,6 +40,7 @@ patcher_args = "-e 'Custom branding' -OcustomName=REVANCED MUSIC"
 
 # We define a "root" build that EXCLUDES microg-support
 [Music.root]
-apkmirror_dlurl = "httpss://apkmirror.com/apk/google-inc/youtube-music/"
+# THIS IS THE LINE I FIXED (it no longer has "httpss://")
+apkmirror_dlurl = "https://apkmirror.com/apk/google-inc/youtube-music/"
 excluded_patches = "'microg-support'"
 patcher_args = "-e 'Custom branding' -OcustomName=REVANCED MUSIC"
